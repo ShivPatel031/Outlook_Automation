@@ -22,7 +22,7 @@ def main():
                 '$top':i+2,
                 '$select':'*',
                 '$skip':i,
-                '$orderby':'receivedDateTime desc'
+                '$orderBy':'receivedDateTime desc'
             }
 
             response = httpx.get(endpoint,headers=headers,params=params)
@@ -32,17 +32,9 @@ def main():
             
             json_response = response.json()
 
-            # print()
-            # print()
-            # print()
-
-            # print(json_response)
-
-            # print()
-            # print()
-            # print()
-
             for mail_message in json_response.get('value',[]):
+                print(mail_message)
+                print()
                 if mail_message['isDraft']:
                     print('Subject:',mail_message['subject'])
                     print('To:',mail_message['toRecipients'])

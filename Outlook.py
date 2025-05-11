@@ -3,6 +3,8 @@ import base64
 import mimetypes
 from pathlib import Path
 import httpx
+from datetime import datetime, timedelta
+import pytz
 from ms_graph import MS_GRAPH_BASE_URL
 
 def search_folder(headers,folder_name='Drafts'):
@@ -120,7 +122,7 @@ def get_message_by_filter(headers,filter,folder_id=None,fields="*",top=5,max_res
     params = {
         '$filter':filter,
         '$select':fields,
-        '$top':min(top,max_results)
+        '$top':min(top,max_results),
     }
 
     messages = []
@@ -207,14 +209,42 @@ def move_email_to_folder(headers,message_id,destinatio_folder_id):
     response.raise_for_status()
     return response.json()
 
-def add_category_to_mail(headers,message_id):
+def add_category_to_mail(headers,message_id,category):
     endpoint = f'{MS_GRAPH_BASE_URL}/me/messages/{message_id}'
     params = {
     # "color": "preset1",
     # "displayName": "Orange category"
-    'categories': ["Orange category"]
+    'categories': category
     }
     response = httpx.patch(endpoint,headers=headers,json=params)
     response.raise_for_status()
     return True
+
+
+
+def to_graph_datetime_utc(year, month, day, hour, minute=0, second=0, tz_name='Asia/Kolkata'):
+    local_tz = pytz.timezone(tz_name)
+    local_dt = local_tz.localize(datetime(year, month, day, hour, minute, second))
+    utc_dt = local_dt.astimezone(pytz.utc)
+    return utc_dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+def add_one_second_to_graph_time(iso_datetime_str):
+    dt = datetime.strptime(iso_datetime_str, '%Y-%m-%dT%H:%M:%SZ')
+    dt_plus_one = dt + timedelta(seconds=1)
+    return dt_plus_one.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def last_outlook_check_time():
+    if os.path.exists('last_outlook_check_time.txt'):
+        with open('last_outlook_check_time.txt','r') as file:
+            check_time = file.read().strip()
+        return add_one_second_to_graph_time(check_time)
+    else:
+        local_timezone = pytz.timezone('Asia/Kolkata')
+        now = datetime.now(local_timezone)
+        yesterday = now - timedelta(days=1)
+        return yesterday.astimezone(pytz.utc).isoformat()
+
+
+
 

@@ -20,7 +20,7 @@ def main():
         messages = search_messages(headers,"patelshiv3123")
 
         for message in messages:
-           is_add =  add_category_to_mail(headers,message['id'])
+           is_add =  add_category_to_mail(headers,message['id'],["Orange category"])
            if is_add:
                print(f'Orange category is add to mail {message['subject']}')
 
