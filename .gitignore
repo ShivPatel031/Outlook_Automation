@@ -1,1 +1,5 @@
 .env
+attachments/
+downloaded/
+refresh_token.txt
+*.txt
