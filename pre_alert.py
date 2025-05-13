@@ -12,17 +12,10 @@ def sanitize_filename(name):
 def process_attachments(headers,message_id,dir_attachment):
     attachments = get_attachments(headers,message_id)
     for attachment in attachments:
-        print('Name', attachment['name'])
-        print('Size',f'{attachment['size']/1024:.2f} KB')
-        print('Content Type:',attachment['contentType'])
-
         try:
             download_attachment(headers,message_id,attachment['id'],attachment['name'],dir_attachment)
         except httpx.HTTPStatusError as e:
             print(f"Failed to download {attachment['name']}: {e.response.status_code}")
-        print()
-        print("-"*150)
-        print()
 
 def main():
     load_dotenv()
@@ -35,7 +28,17 @@ def main():
         access_token = get_access_token(application_id=APPLICATION_ID,client_secret=CLIENT_SECRET,scopes=SCOPES)
         headers = {'Authorization':'Bearer '+access_token}
 
+        print()
+        print(('-'*50)+f'Pre-Alert automation start'+('-'*50))
+        print()
+        print('Fetching Last process time......')
+        print()
+
         outlook_last_check_time = last_outlook_check_time()
+
+        print(f"Automation start with time {outlook_last_check_time}.")
+        print()
+        
 
         filter_condition = f'receivedDateTime ge {outlook_last_check_time}'
 
@@ -43,12 +46,18 @@ def main():
         target_folder = search_folder(headers,folder_name)
         folder_id=target_folder['id']
 
+        print("Fetching message from Inbox......")
+        print()
+
         messages = get_message_by_filter(headers,filter_condition,folder_id,top=50,max_results=50)
 
 
         if not len(messages):
             print("No mail found")
             return
+        
+        print("Fetching destination Folders id.....")
+        print()
 
         destination_parent_folder_name = "Pre-Alerts Automation"
         destination_parent_folder = search_folder(headers,destination_parent_folder_name)
@@ -96,11 +105,17 @@ def main():
                 else:
                     print(f"Error creating subfolder '{response.json()}'")
 
+
+        
+
         email_list = [
             "patelshiv3123@gmail.com",
-            "example2@example.com"
+            "210303105085@paruluniversity.ac.in",
+            "shivpatel310323@gmail.com"
         ]
 
+        print("Filtering e-mail based on present list....")
+        print()
         filtered_emails = [
             email for email in messages
             if email.get("from", {}).get("emailAddress", {}).get("address") in email_list
@@ -114,10 +129,19 @@ def main():
         dir_attachment = Path('./downloaded')
         dir_attachment.mkdir(parents=True,exist_ok=True)
 
+        end_time = None
+
+        print("Emails are in process based on conditions....")
+        print()
+
         for i, message in enumerate(filtered_emails):
             is_last = i == len(filtered_emails) - 1
 
-            if message['hasAttachments']:
+            if message.get("from", {}).get("emailAddress", {}).get("address") == "210303105085@paruluniversity.ac.in":
+                add_category_to_mail(headers, message['id'], ["Yellow category"])
+                move_email_to_folder(headers, message['id'],q_folder_id)
+
+            elif message['hasAttachments']:
                 subject = sanitize_filename(message['subject']) or "no_subject"
                 received_time = sanitize_filename(message['receivedDateTime'])
                 folder_name = f"{subject}_{received_time}"
@@ -133,9 +157,12 @@ def main():
                 move_email_to_folder(headers, message['id'], woa_folder_id)
 
             if is_last:
+                end_time = message['receivedDateTime']
                 with open('last_outlook_check_time.txt','w') as file:
-                    file.write(message['receivedDateTime'])
-                
+                    file.write(end_time)
+        print()  
+        print(('-'*50)+f'Pre-Alert automation end at {end_time}'+('-'*50))
+        print()
 
 
     except httpx.HTTPStatusError as e:
