@@ -2,6 +2,7 @@ import os
 import httpx
 from dotenv import load_dotenv
 from ms_graph import get_access_token,MS_GRAPH_BASE_URL
+from tqdm import tqdm
 
 
 def main():
@@ -32,7 +33,7 @@ def main():
             
             json_response = response.json()
 
-            for mail_message in json_response.get('value',[]):
+            for mail_message in tqdm(json_response.get('value',[])):
                 print(mail_message)
                 print()
                 if mail_message['isDraft']:

@@ -212,8 +212,6 @@ def move_email_to_folder(headers,message_id,destinatio_folder_id):
 def add_category_to_mail(headers,message_id,category):
     endpoint = f'{MS_GRAPH_BASE_URL}/me/messages/{message_id}'
     params = {
-    # "color": "preset1",
-    # "displayName": "Orange category"
     'categories': category
     }
     response = httpx.patch(endpoint,headers=headers,json=params)
@@ -242,7 +240,7 @@ def last_outlook_check_time():
     else:
         local_timezone = pytz.timezone('Asia/Kolkata')
         now = datetime.now(local_timezone)
-        yesterday = now - timedelta(days=1)
+        yesterday = now - timedelta(days=2)
         return yesterday.astimezone(pytz.utc).isoformat()
 
 

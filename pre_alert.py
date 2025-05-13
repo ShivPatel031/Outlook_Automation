@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from ms_graph import get_access_token
 from Outlook import get_message_by_filter,last_outlook_check_time,search_folder,create_folder,create_sub_folder,get_sub_folder,get_attachments,download_attachment,add_category_to_mail,move_email_to_folder
 import re
+from tqdm import tqdm
 
 def sanitize_filename(name):
     return re.sub(r'[<>:"/\\|?*]', '_', name)
@@ -104,6 +105,7 @@ def main():
                     print(f'SubFolder "{sub_folder_name}" created.')
                 else:
                     print(f"Error creating subfolder '{response.json()}'")
+            print()
 
 
         
@@ -113,13 +115,13 @@ def main():
             "210303105085@paruluniversity.ac.in",
             "shivpatel310323@gmail.com"
         ]
-
         print("Filtering e-mail based on present list....")
         print()
         filtered_emails = [
-            email for email in messages
+            email for email in tqdm(messages)
             if email.get("from", {}).get("emailAddress", {}).get("address") in email_list
         ]
+        print()
 
         if not len(filtered_emails):
             print("No pre alert found")
@@ -134,7 +136,8 @@ def main():
         print("Emails are in process based on conditions....")
         print()
 
-        for i, message in enumerate(filtered_emails):
+        pbar = tqdm(total=len(filtered_emails))
+        for i, message in (enumerate(filtered_emails)):
             is_last = i == len(filtered_emails) - 1
 
             if message.get("from", {}).get("emailAddress", {}).get("address") == "210303105085@paruluniversity.ac.in":
@@ -160,6 +163,8 @@ def main():
                 end_time = message['receivedDateTime']
                 with open('last_outlook_check_time.txt','w') as file:
                     file.write(end_time)
+            pbar.update(1)
+        pbar.close()
         print()  
         print(('-'*50)+f'Pre-Alert automation end at {end_time}'+('-'*50))
         print()
