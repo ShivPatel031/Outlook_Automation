@@ -34,33 +34,6 @@ def main():
         print()
         print(('-'*50)+f'Pre-Alert automation start'+('-'*50))
         print()
-        print('Fetching Last process time......')
-        print()
-
-        outlook_last_check_time = last_outlook_check_time()
-
-        print(f"Automation start with time {outlook_last_check_time}.")
-        print()
-        
-
-        filter_condition = f'receivedDateTime ge {outlook_last_check_time}'
-
-        folder_name = 'Inbox'
-        target_folder = search_folder(headers,folder_name)
-        folder_id=target_folder['id']
-
-        print("Fetching message from Inbox......")
-        print()
-
-        messages = get_message_by_filter(headers,filter_condition,folder_id,top=50,max_results=50)
-
-
-        if not len(messages):
-            print("No mail found")
-            return
-        
-        print("Fetching destination Folders id.....")
-        print()
 
         destination_parent_folder_name = "Pre-Alerts Automation"
         destination_parent_folder = search_folder(headers,destination_parent_folder_name)
@@ -88,7 +61,6 @@ def main():
                 return
         
             folder_metadata = response.json()
-            print(f'Folder "{destination_parent_folder_name}" created.')
 
             destination_parent_folder_id = folder_metadata['id']
 
@@ -103,14 +75,44 @@ def main():
                     q_folder_id=folder['id']
                 if folder['displayName']=='Without Attachments':
                     woa_folder_id=folder['id']
-                if status:
-                    print(f'SubFolder "{sub_folder_name}" created.')
-                else:
-                    print(f"Error creating subfolder '{response.json()}'")
-            print()
+        print()
+
+        if os.path.exists("current_email_process.txt"):
+            with open("current_email_process.txt") as apf:
+                eps = apf.read()
+
+        
+        outlook_last_check_time = last_outlook_check_time()
+
+        # print('Fetching Last process time......')
+        # print()
+
 
 
         
+
+        print(f"Automation start with time {outlook_last_check_time}.")
+        print()
+        
+
+        filter_condition = f'receivedDateTime ge {outlook_last_check_time}'
+
+        folder_name = 'Inbox'
+        target_folder = search_folder(headers,folder_name)
+        folder_id=target_folder['id']
+
+        print("Fetching message from Inbox......")
+        print()
+
+        messages = get_message_by_filter(headers,filter_condition,folder_id,top=50,max_results=50)
+
+
+        if not len(messages):
+            print("No mail found")
+            return
+        
+        last_email = messages[-1]
+        end_time = last_email['receivedDateTime']        
 
         email_list = [
             "patelshiv3123@gmail.com",
@@ -138,8 +140,6 @@ def main():
         dir_attachment = Path('./downloaded')
         dir_attachment.mkdir(parents=True,exist_ok=True)
 
-        end_time = None
-
         print("Emails are in process based on conditions....")
         print()
 
@@ -150,7 +150,6 @@ def main():
                 now = datetime.now(local_timezone)
                 
                 f.write(f"Process start for email with ID :{message['id']} at {now} time.")
-                is_last = i == len(filtered_emails) - 1
 
                 if message.get("from", {}).get("emailAddress", {}).get("address") == "210303105085@paruluniversity.ac.in":
                     f.write("\nFall into query category.")
@@ -191,15 +190,15 @@ def main():
                     f.write("\nstart adding into no attachement folder.")
                     move_email_to_folder(headers, message['id'], woa_folder_id)
                     f.write("\nend adding into no attachments folder")
-
-                if is_last:
-                    f.write("\nThis is last email in list")
-                    end_time = message['receivedDateTime']
-                    with open('last_outlook_check_time.txt','w') as file:
-                        file.write(end_time)
-                    f.write("\nlog last email time successfull.")
+                f.write(f"\nProcess end for email with ID :{message['id']} at {now} time.")
                 pbar.update(1)
         pbar.close()
+
+        with open('last_outlook_check_time.txt','w') as file:
+            with open("current_email_process.txt","a") as f:
+                file.write(end_time)
+                f.write("\nLast email time logged successfully.")
+                
         print()  
         print(('-'*50)+f'Pre-Alert automation end at {end_time}'+('-'*50))
         print()
