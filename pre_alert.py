@@ -1,5 +1,7 @@
 import os
 import httpx
+from datetime import datetime
+import pytz
 from pathlib import Path
 from dotenv import load_dotenv
 from ms_graph import get_access_token
@@ -117,6 +119,11 @@ def main():
         ]
         print("Filtering e-mail based on present list....")
         print()
+
+        for message in messages:
+            print(message['subject'])
+            print(message['receivedDateTime'])
+
         filtered_emails = [
             email for email in tqdm(messages)
             if email.get("from", {}).get("emailAddress", {}).get("address") in email_list
@@ -138,32 +145,60 @@ def main():
 
         pbar = tqdm(total=len(filtered_emails))
         for i, message in (enumerate(filtered_emails)):
-            is_last = i == len(filtered_emails) - 1
+            with open("current_email_process.txt","w") as f:
+                local_timezone = pytz.timezone('Asia/Kolkata')
+                now = datetime.now(local_timezone)
+                
+                f.write(f"Process start for email with ID :{message['id']} at {now} time.")
+                is_last = i == len(filtered_emails) - 1
 
-            if message.get("from", {}).get("emailAddress", {}).get("address") == "210303105085@paruluniversity.ac.in":
-                add_category_to_mail(headers, message['id'], ["Yellow category"])
-                move_email_to_folder(headers, message['id'],q_folder_id)
+                if message.get("from", {}).get("emailAddress", {}).get("address") == "210303105085@paruluniversity.ac.in":
+                    f.write("\nFall into query category.")
+                    f.write("\nstart adding category.")
+                    add_category_to_mail(headers, message['id'], ["Yellow category"])
+                    f.write("\nend adding category.")
+                    f.write("\nstart adding into query folder.")
+                    move_email_to_folder(headers, message['id'],q_folder_id)
+                    f.write("\nend adding into query folder.")
 
-            elif message['hasAttachments']:
-                subject = sanitize_filename(message['subject']) or "no_subject"
-                received_time = sanitize_filename(message['receivedDateTime'])
-                folder_name = f"{subject}_{received_time}"
+                elif message['hasAttachments']:
+                    f.write("\nFall in Pre-alert category.")
+                    f.write("\nstart adding category.")
+                    add_category_to_mail(headers, message['id'], ["Orange category"])
+                    f.write("\nend adding category.")
 
-                dir_attachment = Path('./downloaded') / folder_name
-                dir_attachment.mkdir(parents=True, exist_ok=True)
+                    f.write("\nstart downloading documents.")
 
-                process_attachments(headers, message['id'], dir_attachment)
-                add_category_to_mail(headers, message['id'], ["Orange category"])
-                move_email_to_folder(headers, message['id'], pa_folder_id)
-            else:
-                add_category_to_mail(headers, message['id'], ["Orange category", "Yellow category"])
-                move_email_to_folder(headers, message['id'], woa_folder_id)
+                    subject = sanitize_filename(message['subject']) or "no_subject"
+                    received_time = sanitize_filename(message['receivedDateTime'])
+                    folder_name = f"{subject}_{received_time}"
 
-            if is_last:
-                end_time = message['receivedDateTime']
-                with open('last_outlook_check_time.txt','w') as file:
-                    file.write(end_time)
-            pbar.update(1)
+                    dir_attachment = Path('./downloaded') / folder_name
+                    dir_attachment.mkdir(parents=True, exist_ok=True)
+
+                    process_attachments(headers, message['id'], dir_attachment)
+                    f.write("end downloading attachments")
+                    
+                    f.write("\nstart adding into pre-alert folder.")
+                    move_email_to_folder(headers, message['id'], pa_folder_id)
+                    f.write("\nend adding into pre-alert folder.")
+                    
+                else:
+                    f.write("\nFall in no attachment category.")
+                    f.write("\nstart adding category.")
+                    add_category_to_mail(headers, message['id'], ["Orange category", "Yellow category"])
+                    f.write("\nend adding category")
+                    f.write("\nstart adding into no attachement folder.")
+                    move_email_to_folder(headers, message['id'], woa_folder_id)
+                    f.write("\nend adding into no attachments folder")
+
+                if is_last:
+                    f.write("\nThis is last email in list")
+                    end_time = message['receivedDateTime']
+                    with open('last_outlook_check_time.txt','w') as file:
+                        file.write(end_time)
+                    f.write("\nlog last email time successfull.")
+                pbar.update(1)
         pbar.close()
         print()  
         print(('-'*50)+f'Pre-Alert automation end at {end_time}'+('-'*50))

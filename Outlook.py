@@ -240,7 +240,7 @@ def last_outlook_check_time():
     else:
         local_timezone = pytz.timezone('Asia/Kolkata')
         now = datetime.now(local_timezone)
-        yesterday = now - timedelta(days=2)
+        yesterday = now - timedelta(days=30)
         return yesterday.astimezone(pytz.utc).isoformat()
 
 
