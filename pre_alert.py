@@ -5,12 +5,83 @@ import pytz
 from pathlib import Path
 from dotenv import load_dotenv
 from ms_graph import get_access_token
-from Outlook import get_message_by_filter,last_outlook_check_time,search_folder,create_folder,create_sub_folder,get_sub_folder,get_attachments,download_attachment,add_category_to_mail,move_email_to_folder
+from Outlook import get_message_by_filter,last_outlook_check_time,search_folder,create_folder,create_sub_folder,get_sub_folder,get_attachments,download_attachment,add_category_to_mail,move_email_to_folder,get_single_message
 import re
 from tqdm import tqdm
+import json
+
+
+category = {
+    "query":["Yellow category"],
+    "pre_alert":["Orange category"],
+    "no_attachments":["Orange category", "Yellow category"]
+}
 
 def sanitize_filename(name):
     return re.sub(r'[<>:"/\\|?*]', '_', name)
+
+def update_status_file(data):
+    with open("current_email_process.json", "w") as f:
+        json.dump(data, f, indent=4)
+
+def assign_filter_value(message,data):
+    if message.get("from", {}).get("emailAddress", {}).get("address") == "210303105085@paruluniversity.ac.in":
+        data['filter']="query"
+    elif message['hasAttachments']:
+        data['filter']="pre_alert"
+    else:
+        data['filter']="no_attachments"
+    
+    update_status_file(data)
+
+    return data
+
+def combine_conditions(data):
+    if data['filter'] == "pre_alert":
+        with open("pre_alert_conditions.json","r") as t:
+            data=data | json.load(t)
+    else:
+        with open("no_pre_alert_conditions.json","r") as t:
+            data = data | json.load(t)
+
+    update_status_file(data)
+
+    return data
+
+
+def add_category(headers,message,data,category):
+    add_category_to_mail(headers, message['id'], category[data['filter']])
+
+    data["category_added"]=True
+
+    update_status_file(data)
+
+    return data
+
+def download_attachments(headers,message,data):
+    subject = sanitize_filename(message['subject']) or "no_subject"
+    received_time = sanitize_filename(message['receivedDateTime'])
+    folder_name = f"{subject}_{received_time}"
+
+    dir_attachment = Path('./downloaded') / folder_name
+    dir_attachment.mkdir(parents=True, exist_ok=True)
+
+    process_attachments(headers, message['id'], dir_attachment)
+
+    data["attachments_downloaded"]=True
+
+    update_status_file(data)
+
+    return data
+
+def move_to_folder(headers,message,data,folders):
+    
+    move_email_to_folder(headers, message['id'],folders[data['filter']])
+
+    data["moved_to_folder"]=True
+    data['end']=True
+
+    update_status_file(data)
 
 def process_attachments(headers,message_id,dir_attachment):
     attachments = get_attachments(headers,message_id)
@@ -31,16 +102,24 @@ def main():
         access_token = get_access_token(application_id=APPLICATION_ID,client_secret=CLIENT_SECRET,scopes=SCOPES)
         headers = {'Authorization':'Bearer '+access_token}
 
+        folders={
+            "query":"",
+            "pre_alert":"",
+            "no_attachments":""
+        }
+
         print()
         print(('-'*50)+f'Pre-Alert automation start'+('-'*50))
         print()
 
+        folder_name = 'Inbox'
+        target_folder = search_folder(headers,folder_name)
+        folder_id=target_folder['id']
+
         destination_parent_folder_name = "Pre-Alerts Automation"
         destination_parent_folder = search_folder(headers,destination_parent_folder_name)
 
-        pa_folder_id=None
-        q_folder_id=None
-        woa_folder_id=None
+
 
         if destination_parent_folder:
             destination_parent_folder_id=destination_parent_folder['id']
@@ -48,11 +127,11 @@ def main():
 
             for folder in sub_folders:
                 if folder['displayName']=='Pre-Alerts':
-                    pa_folder_id=folder['id']
+                    folders["pre_alert"]=folder['id']
                 if folder['displayName']=='Query':
-                    q_folder_id=folder['id']
+                    folders["query"]=folder['id']
                 if folder['displayName']=='Without Attachments':
-                    woa_folder_id=folder['id']
+                    folders['no_attachments']=folder['id']
 
         else:
             status,response = create_folder(headers,destination_parent_folder_name)
@@ -70,26 +149,44 @@ def main():
                 status,response = create_sub_folder(headers,destination_parent_folder_id,sub_folder_name)
                 folder = response.json()
                 if folder['displayName']=='Pre-Alerts':
-                    pa_folder_id=folder['id']
+                    folders["pre_alert"]=folder['id']
                 if folder['displayName']=='Query':
-                    q_folder_id=folder['id']
+                    folders["query"]=folder['id']
                 if folder['displayName']=='Without Attachments':
-                    woa_folder_id=folder['id']
+                    folders['no_attachments']=folder['id']
         print()
 
-        if os.path.exists("current_email_process.txt"):
-            with open("current_email_process.txt") as apf:
-                eps = apf.read()
+        outlook_last_check_time = None
+
+        if os.path.exists("current_email_process.json"):
+            eps = None
+            with open("current_email_process.json",'r') as apf:
+                eps = json.load(apf)
+            
+            if not eps["end"]:
+
+                message = get_single_message(headers,eps['email_Id'],folder_id)
+                
+                if not eps['filter']:
+                    eps = assign_filter_value(message,eps)
+                    eps = combine_conditions(eps)
+                
+                if not eps['category_added']:
+                    eps = add_category(headers,message,eps,category)
+
+                if "attachments_downloaded" in eps:
+                    if not eps['attachments_downloaded']:
+                        eps = download_attachments(headers,message,eps)
+
+                if not eps['category_added']:
+                    move_to_folder(headers,message,eps,folders)
+                
+                outlook_last_check_time = eps['time']
+
 
         
-        outlook_last_check_time = last_outlook_check_time()
-
-        # print('Fetching Last process time......')
-        # print()
-
-
-
-        
+        if outlook_last_check_time is None:
+            outlook_last_check_time = last_outlook_check_time()
 
         print(f"Automation start with time {outlook_last_check_time}.")
         print()
@@ -97,9 +194,7 @@ def main():
 
         filter_condition = f'receivedDateTime ge {outlook_last_check_time}'
 
-        folder_name = 'Inbox'
-        target_folder = search_folder(headers,folder_name)
-        folder_id=target_folder['id']
+        
 
         print("Fetching message from Inbox......")
         print()
@@ -145,53 +240,29 @@ def main():
 
         pbar = tqdm(total=len(filtered_emails))
         for i, message in (enumerate(filtered_emails)):
-            with open("current_email_process.txt","w") as f:
-                local_timezone = pytz.timezone('Asia/Kolkata')
-                now = datetime.now(local_timezone)
-                
-                f.write(f"Process start for email with ID :{message['id']} at {now} time.")
+            data=None
+            with open("process_structure.json","r") as file:
+                data=json.load(file)
+            
+            data["email_Id"]=message['id']
+            data["time"]=message['receivedDateTime']
 
-                if message.get("from", {}).get("emailAddress", {}).get("address") == "210303105085@paruluniversity.ac.in":
-                    f.write("\nFall into query category.")
-                    f.write("\nstart adding category.")
-                    add_category_to_mail(headers, message['id'], ["Yellow category"])
-                    f.write("\nend adding category.")
-                    f.write("\nstart adding into query folder.")
-                    move_email_to_folder(headers, message['id'],q_folder_id)
-                    f.write("\nend adding into query folder.")
+            update_status_file(data)
 
-                elif message['hasAttachments']:
-                    f.write("\nFall in Pre-alert category.")
-                    f.write("\nstart adding category.")
-                    add_category_to_mail(headers, message['id'], ["Orange category"])
-                    f.write("\nend adding category.")
+            data = assign_filter_value(message,data)
 
-                    f.write("\nstart downloading documents.")
+            data = combine_conditions(data)
 
-                    subject = sanitize_filename(message['subject']) or "no_subject"
-                    received_time = sanitize_filename(message['receivedDateTime'])
-                    folder_name = f"{subject}_{received_time}"
+            data = add_category(headers,message,data,category)
+            
 
-                    dir_attachment = Path('./downloaded') / folder_name
-                    dir_attachment.mkdir(parents=True, exist_ok=True)
+            if "attachments_downloaded" in data:
 
-                    process_attachments(headers, message['id'], dir_attachment)
-                    f.write("end downloading attachments")
-                    
-                    f.write("\nstart adding into pre-alert folder.")
-                    move_email_to_folder(headers, message['id'], pa_folder_id)
-                    f.write("\nend adding into pre-alert folder.")
-                    
-                else:
-                    f.write("\nFall in no attachment category.")
-                    f.write("\nstart adding category.")
-                    add_category_to_mail(headers, message['id'], ["Orange category", "Yellow category"])
-                    f.write("\nend adding category")
-                    f.write("\nstart adding into no attachement folder.")
-                    move_email_to_folder(headers, message['id'], woa_folder_id)
-                    f.write("\nend adding into no attachments folder")
-                f.write(f"\nProcess end for email with ID :{message['id']} at {now} time.")
-                pbar.update(1)
+                data = download_attachments(headers,message,data)
+
+            move_to_folder(headers,message,data,folders)
+
+            pbar.update(1)
         pbar.close()
 
         with open('last_outlook_check_time.txt','w') as file:
