@@ -163,23 +163,25 @@ def main():
             with open("current_email_process.json",'r') as apf:
                 eps = json.load(apf)
             
-            if not eps["end"]:
+            if eps and (not eps["end"]):
 
                 message = get_single_message(headers,eps['email_Id'],folder_id)
-                
-                if not eps['filter']:
-                    eps = assign_filter_value(message,eps)
-                    eps = combine_conditions(eps)
-                
-                if not eps['category_added']:
-                    eps = add_category(headers,message,eps,category)
 
-                if "attachments_downloaded" in eps:
-                    if not eps['attachments_downloaded']:
-                        eps = download_attachments(headers,message,eps)
+                if message is not None:
+                
+                    if not eps['filter']:
+                        eps = assign_filter_value(message,eps)
+                        eps = combine_conditions(eps)
+                    
+                    if not eps['category_added']:
+                        eps = add_category(headers,message,eps,category)
 
-                if not eps['category_added']:
-                    move_to_folder(headers,message,eps,folders)
+                    if "attachments_downloaded" in eps:
+                        if not eps['attachments_downloaded']:
+                            eps = download_attachments(headers,message,eps)
+
+                    if not eps['category_added']:
+                        move_to_folder(headers,message,eps,folders)
                 
                 outlook_last_check_time = eps['time']
 

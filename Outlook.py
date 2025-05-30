@@ -29,9 +29,6 @@ def get_sub_folder(headers,folder_id):
     return response.json().get('value',[])
 
 def get_single_message(headers,message_id=None,folder_id=None):
-    # print(headers)
-    print(message_id)
-    print(folder_id)
     if folder_id is None:
         endpoint = f'{MS_GRAPH_BASE_URL}/me/messages/{message_id}'
     else:
@@ -40,11 +37,9 @@ def get_single_message(headers,message_id=None,folder_id=None):
     response = httpx.get(endpoint,headers=headers)
 
     if response.status_code != 200:
-        raise Exception(f'Failed to retrieve emails: {response.json()}')
+        return None
     
     json_response = response.json()
-
-    print(json_response)
 
     return json_response
 
